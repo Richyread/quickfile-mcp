@@ -459,3 +459,53 @@ export interface CreateNoteParams {
   EntityID: number;
   NoteText: string;
 }
+
+// =============================================================================
+// Document Types
+// =============================================================================
+
+/** Receipt attachment — linked to a purchase */
+export interface DocumentTypeReceipt {
+  Receipt: {
+    PurchaseId: number;
+    CaptureDateTime: string;
+  };
+}
+
+/** Sales attachment — linked to an invoice */
+export interface DocumentTypeSalesAttachment {
+  SalesAttachment: {
+    InvoiceId: number;
+    CaptureDateTime: string;
+  };
+}
+
+/** General attachment — not linked to a specific entity */
+export interface DocumentTypeGeneral {
+  General: {
+    CaptureDateTime: string;
+  };
+}
+
+export type DocumentType =
+  | DocumentTypeReceipt
+  | DocumentTypeSalesAttachment
+  | DocumentTypeGeneral;
+
+export interface DocumentUploadParams {
+  DocumentDetails: {
+    FileName: string;
+    EmbeddedFileBinaryObject: string; // base64-encoded file data
+    Type: DocumentType;
+  };
+}
+
+export interface DocumentUploadResponse {
+  UploadTimeStamp: string;
+  DocumentData: {
+    Data: Array<{
+      Id: number;
+      Path: string;
+    }>;
+  };
+}
