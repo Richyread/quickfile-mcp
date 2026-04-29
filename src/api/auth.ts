@@ -25,6 +25,9 @@ import type {
   QuickFileHeader,
 } from "../types/quickfile.js";
 
+// Credential cache (file read once per process)
+let _cachedCredentials: QuickFileCredentials | null = null;
+
 // Credential storage location following project pattern
 const CREDENTIALS_PATH = join(
   homedir(),
@@ -37,9 +40,53 @@ const CREDENTIALS_PATH = join(
 let submissionCounter = 0;
 
 /**
- * Load credentials from secure storage
+ * Validate that all three required credential fields are present.
+ * Uses an array check to keep cyclomatic complexity minimal.
  */
-export function loadCredentials(): QuickFileCredentials {
+function validateRequiredFields(credentials: QuickFileCredentials): void {
+  const present = [
+    credentials.accountNumber,
+    credentials.apiKey,
+    credentials.applicationId,
+  ];
+  if (present.some((v) => !v)) {
+    throw new Error(
+      "Missing required credential fields: accountNumber, apiKey, applicationId",
+    );
+  }
+}
+
+/**
+ * Validate the optional businessProfile block when it is present.
+ * Extracted to reduce cyclomatic complexity of loadCredentials.
+ */
+function validateBusinessProfile(credentials: QuickFileCredentials): void {
+  const bp = credentials.businessProfile;
+  if (bp === undefined) {
+    return;
+  }
+  if (typeof bp !== "object" || bp === null || Array.isArray(bp)) {
+    throw new Error(
+      "Invalid businessProfile in credentials file: must be an object",
+    );
+  }
+  if (typeof bp.vatRegistered !== "boolean") {
+    throw new Error(
+      "Invalid businessProfile in credentials file: vatRegistered must be true or false",
+    );
+  }
+}
+
+/**
+ * Load credentials from secure storage.
+ * Reads the file once per process and caches the result.
+ * Pass `forceReload = true` in tests to bypass the cache.
+ */
+export function loadCredentials(forceReload = false): QuickFileCredentials {
+  if (_cachedCredentials && !forceReload) {
+    return _cachedCredentials;
+  }
+
   if (!existsSync(CREDENTIALS_PATH)) {
     throw new Error(
       `QuickFile credentials not found at ${CREDENTIALS_PATH}\n` +
@@ -50,18 +97,9 @@ export function loadCredentials(): QuickFileCredentials {
   try {
     const content = readFileSync(CREDENTIALS_PATH, "utf-8");
     const credentials = JSON.parse(content) as QuickFileCredentials;
-
-    // Validate required fields
-    if (
-      !credentials.accountNumber ||
-      !credentials.apiKey ||
-      !credentials.applicationId
-    ) {
-      throw new Error(
-        "Missing required credential fields: accountNumber, apiKey, applicationId",
-      );
-    }
-
+    validateRequiredFields(credentials);
+    validateBusinessProfile(credentials);
+    _cachedCredentials = credentials;
     return credentials;
   } catch (error) {
     if (error instanceof SyntaxError) {
@@ -69,6 +107,15 @@ export function loadCredentials(): QuickFileCredentials {
     }
     throw error;
   }
+}
+
+/**
+ * Clear the credentials cache.
+ * Intended for tests only — not for production use.
+ * @internal
+ */
+export function _clearCredentialsCache(): void {
+  _cachedCredentials = null;
 }
 
 /**
