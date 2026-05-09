@@ -119,7 +119,7 @@ export async function handleSupplierTool(
           Offset: (args.offset as number) ?? 0,
           CompanyName: args.companyName as string | undefined,
           ContactName: args.contactName as string | undefined,
-          Email: args.email as string | undefined,
+          ContactEmail: args.email as string | undefined,
           Postcode: args.postcode as string | undefined,
         };
         const cleaned = cleanParams(params);

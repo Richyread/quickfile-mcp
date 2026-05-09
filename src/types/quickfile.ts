@@ -320,7 +320,7 @@ export interface Supplier {
 export interface SupplierSearchParams {
   CompanyName?: string;
   ContactName?: string;
-  Email?: string;
+  ContactEmail?: string;
   Postcode?: string;
   ReturnCount?: number;
   Offset?: number;
