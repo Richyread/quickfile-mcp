@@ -550,11 +550,60 @@ export function buildEntityData(
 }
 
 /**
- * Build entity update data (preserves undefined for partial updates)
+ * Build client update data (preserves undefined for partial updates).
+ * Uses the bare field names (Email, FirstName, Surname, Telephone) that the
+ * Client_Update endpoint expects. The supplier equivalent lives below — they
+ * are kept side-by-side rather than collapsed into one shared helper because
+ * the two endpoints use different wire-level field names for contact details:
+ * suppliers prefix them with "Contact" (ContactEmail, ContactFirstName, …).
  */
-export function buildEntityUpdateData(
+export function buildClientUpdateData(
   args: Record<string, unknown>,
   address: ClientAddress,
 ): EntityData {
   return extractEntityFields(args, address);
+}
+
+/**
+ * Build supplier update data (preserves undefined for partial updates).
+ * Mirrors buildClientUpdateData but emits the Contact-prefixed wire names
+ * required by Supplier_Update / Supplier_Get / Supplier_Search.
+ */
+export interface SupplierEntityData {
+  CompanyName?: string;
+  Title?: string;
+  ContactFirstName?: string;
+  ContactSurname?: string;
+  ContactEmail?: string;
+  ContactTelephone?: string;
+  ContactMobile?: string;
+  Website?: string;
+  VatNumber?: string;
+  CompanyRegNo?: string;
+  Currency?: string;
+  TermDays?: number;
+  Notes?: string;
+  Address?: ClientAddress;
+}
+
+export function buildSupplierUpdateData(
+  args: Record<string, unknown>,
+  address: ClientAddress,
+): SupplierEntityData {
+  return {
+    CompanyName: args.companyName as string | undefined,
+    Title: args.title as string | undefined,
+    ContactFirstName: args.firstName as string | undefined,
+    ContactSurname: args.lastName as string | undefined,
+    ContactEmail: args.email as string | undefined,
+    ContactTelephone: args.telephone as string | undefined,
+    ContactMobile: args.mobile as string | undefined,
+    Website: args.website as string | undefined,
+    VatNumber: args.vatNumber as string | undefined,
+    CompanyRegNo: args.companyRegNo as string | undefined,
+    Currency: args.currency as string | undefined,
+    TermDays: args.termDays as number | undefined,
+    Notes: args.notes as string | undefined,
+    Address: Object.keys(address).length > 0 ? address : undefined,
+  };
 }

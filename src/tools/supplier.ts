@@ -13,6 +13,7 @@ import {
   cleanParams,
   buildAddressFromArgs,
   buildEntityData,
+  buildSupplierUpdateData,
   searchSchemaProperties,
   entitySchemaProperties,
   type ToolResult,
@@ -62,6 +63,21 @@ export const supplierTools: Tool[] = [
     },
   },
   {
+    name: "quickfile_supplier_update",
+    description: "Update an existing supplier record",
+    inputSchema: {
+      type: "object",
+      properties: {
+        supplierId: {
+          type: "number",
+          description: "The supplier ID to update",
+        },
+        ...entitySchemaProperties,
+      },
+      required: ["supplierId"],
+    },
+  },
+  {
     name: "quickfile_supplier_delete",
     description: "Delete a supplier record (use with caution)",
     inputSchema: {
@@ -93,6 +109,15 @@ interface SupplierGetResponse {
 
 interface SupplierCreateResponse {
   SupplierID: number;
+}
+
+// Supplier_Update response shape. The endpoint is not documented in the public
+// QuickFile API reference but is functional. It returns SupplierDetailsUpdated
+// as a boolean; observed live values are unreliable (false even on a successful
+// update verified by a follow-up Supplier_Get), so the handler does not surface
+// it to callers.
+interface SupplierUpdateResponse {
+  SupplierDetailsUpdated?: boolean;
 }
 
 // =============================================================================
@@ -155,6 +180,32 @@ export async function handleSupplierTool(
           success: true,
           supplierId: response.SupplierID,
           message: `Supplier created successfully with ID ${response.SupplierID}`,
+        });
+      }
+
+      case "quickfile_supplier_update": {
+        // Notes on the wire format (verified live against the QuickFile API,
+        // none of which are in the public method reference):
+        // - The endpoint URL is /1_2/supplier/update.
+        // - The request wraps the supplier in Body.SupplierDetails — note this
+        //   is NOT symmetric with Supplier_Create (which uses Body.SupplierData)
+        //   nor with Client_Update (which uses Body.ClientData).
+        // - Contact fields use the Contact-prefixed names (ContactEmail,
+        //   ContactFirstName, …) matching Supplier_Get and Supplier_Search,
+        //   built by buildSupplierUpdateData (utils.ts).
+        const supplierId = args.supplierId as number;
+        const address = buildAddressFromArgs(args);
+        const entityData = buildSupplierUpdateData(args, address);
+        const updateData = { SupplierID: supplierId, ...entityData };
+        const cleanData = cleanParams(updateData);
+        await apiClient.request<
+          { SupplierDetails: typeof cleanData },
+          SupplierUpdateResponse
+        >("Supplier_Update", { SupplierDetails: cleanData });
+        return successResult({
+          success: true,
+          supplierId,
+          message: `Supplier #${supplierId} updated successfully`,
         });
       }
 

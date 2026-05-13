@@ -13,7 +13,7 @@ import {
   cleanParams,
   buildAddressFromArgs,
   buildEntityData,
-  buildEntityUpdateData,
+  buildClientUpdateData,
   searchSchemaProperties,
   entitySchemaProperties,
   type ToolResult,
@@ -243,7 +243,7 @@ export async function handleClientTool(
       case "quickfile_client_update": {
         const clientId = args.clientId as number;
         const address = buildAddressFromArgs(args);
-        const entityData = buildEntityUpdateData(args, address);
+        const entityData = buildClientUpdateData(args, address);
         const updateData = { ClientID: clientId, ...entityData };
         const cleanData = cleanParams(updateData);
         await apiClient.request<
