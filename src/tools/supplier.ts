@@ -111,11 +111,10 @@ interface SupplierCreateResponse {
   SupplierID: number;
 }
 
-// Supplier_Update response shape. The endpoint is not documented in the public
-// QuickFile API reference but is functional. It returns SupplierDetailsUpdated
-// as a boolean; observed live values are unreliable (false even on a successful
-// update verified by a follow-up Supplier_Get), so the handler does not surface
-// it to callers.
+// Supplier_Update response shape. Schema: api.quickfile.co.uk/d/v1_2/Supplier_Update.
+// The endpoint returns SupplierDetailsUpdated as a boolean, but observed live
+// values are unreliable (false even on a successful update verified by a
+// follow-up Supplier_Get), so the handler does not surface it to callers.
 interface SupplierUpdateResponse {
   SupplierDetailsUpdated?: boolean;
 }
@@ -184,12 +183,9 @@ export async function handleSupplierTool(
       }
 
       case "quickfile_supplier_update": {
-        // Notes on the wire format (verified live against the QuickFile API,
-        // none of which are in the public method reference):
-        // - The endpoint URL is /1_2/supplier/update.
-        // - The request wraps the supplier in Body.SupplierDetails — note this
-        //   is NOT symmetric with Supplier_Create (which uses Body.SupplierData)
-        //   nor with Client_Update (which uses Body.ClientData).
+        // Wire-format notes (schema: api.quickfile.co.uk/d/v1_2/Supplier_Update):
+        // - Body wraps the supplier in SupplierDetails (same wrapper as
+        //   Supplier_Create; the client endpoints use ClientData instead).
         // - Contact fields use the Contact-prefixed names (ContactEmail,
         //   ContactFirstName, …) matching Supplier_Get and Supplier_Search,
         //   built by buildSupplierUpdateData (utils.ts).
