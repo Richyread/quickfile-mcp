@@ -166,10 +166,10 @@ function buildSearchParams(
   args: Record<string, unknown>,
 ): Record<string, unknown> {
   const searchParams: Record<string, unknown> = {
-    ReturnCount: (args.returnCount as number) ?? 25,
-    Offset: (args.offset as number) ?? 0,
-    OrderResultsBy: (args.orderBy as string) ?? "CompanyName",
-    OrderDirection: (args.orderDirection as string) ?? "ASC",
+    ReturnCount: args.returnCount ?? 25,
+    Offset: args.offset ?? 0,
+    OrderResultsBy: args.orderBy ?? "CompanyName",
+    OrderDirection: args.orderDirection ?? "ASC",
   };
 
   if (args.companyName) {

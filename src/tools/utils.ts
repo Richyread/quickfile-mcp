@@ -746,9 +746,10 @@ export interface SupplierAddressFields {
 
 /**
  * Build the flat address fields supplier endpoints expect.
- * Reads both `country` and `countryIso` from args for caller compatibility,
- * but emits `CountryISO` on the wire (only ISO 3166-1 alpha-2 codes are
- * accepted, e.g. "GB", "US").
+ * Reads both `countryIso` (preferred) and `country` (legacy) from args for
+ * caller compatibility, but emits `CountryISO` on the wire only when the
+ * value is a valid ISO 3166-1 alpha-2 code (e.g. "GB", "US"). Anything else
+ * is dropped rather than sent — the API rejects non-ISO values.
  */
 export function buildSupplierAddressFields(
   args: Record<string, unknown>,
@@ -769,13 +770,14 @@ export function buildSupplierAddressFields(
   if (args.postcode) {
     fields.Postcode = args.postcode as string;
   }
-  if (args.countryIso) {
-    fields.CountryISO = args.countryIso as string;
-  } else if (args.country) {
-    // Best-effort compatibility: accept `country` and emit it as CountryISO if
-    // it already looks like a 2-letter code; otherwise drop it (the API rejects
-    // anything that isn't a valid ISO alpha-2 code).
-    const value = (args.country as string).trim();
+  const rawCountry =
+    typeof args.countryIso === "string"
+      ? args.countryIso
+      : typeof args.country === "string"
+        ? args.country
+        : undefined;
+  if (rawCountry) {
+    const value = rawCountry.trim();
     if (/^[A-Za-z]{2}$/.test(value)) {
       fields.CountryISO = value.toUpperCase();
     }

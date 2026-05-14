@@ -25,7 +25,7 @@ export const supplierTools: Tool[] = [
   {
     name: "quickfile_supplier_search",
     description:
-      "Search for suppliers by company name, contact first/last name, contact email, or postcode. Response contains user-controlled fields (CompanyName, contact names) that are automatically sanitized.",
+      "Search for suppliers by company name, contact first/last name, contact email, telephone, supplier reference, or postcode. Response contains user-controlled fields (CompanyName, contact names) that are automatically sanitized.",
     inputSchema: {
       type: "object",
       properties: {
@@ -44,6 +44,14 @@ export const supplierTools: Tool[] = [
         email: {
           type: "string",
           description: "Search by contact email address",
+        },
+        telephone: {
+          type: "string",
+          description: "Search by contact telephone number",
+        },
+        supplierReference: {
+          type: "string",
+          description: "Search by supplier reference",
         },
         postcode: {
           type: "string",
@@ -189,6 +197,7 @@ export async function handleSupplierTool(
           ContactSurname: args.lastName as string | undefined,
           ContactEmail: args.email as string | undefined,
           ContactTel: args.telephone as string | undefined,
+          SupplierReference: args.supplierReference as string | undefined,
           Postcode: args.postcode as string | undefined,
           ShowDeleted: args.showDeleted as boolean | undefined,
         };

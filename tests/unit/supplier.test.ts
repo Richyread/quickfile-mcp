@@ -167,6 +167,43 @@ describe("Supplier tools", () => {
       expect(payload.SupplierDetails).not.toHaveProperty("CountryISO");
     });
 
+    it("normalizes `countryIso` to uppercase before sending", async () => {
+      mockRequest.mockResolvedValueOnce({ SupplierID: 12345 });
+
+      await handleSupplierTool("quickfile_supplier_create", {
+        companyName: "Acme Widgets Ltd",
+        countryIso: "gb",
+      });
+
+      const [, payload] = mockRequest.mock.calls[0];
+      expect(payload.SupplierDetails.CountryISO).toBe("GB");
+    });
+
+    it("drops non-ISO `countryIso` values just like the `country` path", async () => {
+      mockRequest.mockResolvedValueOnce({ SupplierID: 12345 });
+
+      await handleSupplierTool("quickfile_supplier_create", {
+        companyName: "Acme Widgets Ltd",
+        countryIso: "United Kingdom",
+      });
+
+      const [, payload] = mockRequest.mock.calls[0];
+      expect(payload.SupplierDetails).not.toHaveProperty("CountryISO");
+    });
+
+    it("prefers `countryIso` over `country` when both are supplied", async () => {
+      mockRequest.mockResolvedValueOnce({ SupplierID: 12345 });
+
+      await handleSupplierTool("quickfile_supplier_create", {
+        companyName: "Acme Widgets Ltd",
+        countryIso: "US",
+        country: "GB",
+      });
+
+      const [, payload] = mockRequest.mock.calls[0];
+      expect(payload.SupplierDetails.CountryISO).toBe("US");
+    });
+
     it("nests currency / termDays / VAT rate / nominal code inside a Preferences block", async () => {
       mockRequest.mockResolvedValueOnce({ SupplierID: 12345 });
 
@@ -354,10 +391,11 @@ describe("Supplier tools", () => {
       });
 
       const [, payload] = mockRequest.mock.calls[0];
-      expect(Object.keys(payload.SupplierDetails).sort()).toEqual([
-        "ContactEmail",
-        "SupplierID",
-      ]);
+      expect(
+        Object.keys(payload.SupplierDetails).sort((a, b) =>
+          a.localeCompare(b),
+        ),
+      ).toEqual(["ContactEmail", "SupplierID"]);
     });
 
     it("returns a stable success result that does not expose the misleading SupplierDetailsUpdated boolean", async () => {
@@ -415,6 +453,45 @@ describe("Supplier tools", () => {
       expect(payload.SearchParameters).not.toHaveProperty("ContactName");
     });
 
+    it("sends the telephone filter as ContactTel and surfaces it in the input schema", async () => {
+      const tool = supplierTools.find(
+        (candidate) => candidate.name === "quickfile_supplier_search",
+      );
+      const props = (tool?.inputSchema as { properties: Record<string, unknown> })
+        .properties;
+      expect(props).toHaveProperty("telephone");
+
+      mockRequest.mockResolvedValueOnce({ RecordsetCount: 0, Record: [] });
+      await handleSupplierTool("quickfile_supplier_search", {
+        telephone: "020 7946 0000",
+      });
+
+      const [, payload] = mockRequest.mock.calls[0];
+      expect(payload.SearchParameters).toMatchObject({
+        ContactTel: "020 7946 0000",
+      });
+      expect(payload.SearchParameters).not.toHaveProperty("ContactTelephone");
+    });
+
+    it("sends the supplierReference filter on the wire and surfaces it in the input schema", async () => {
+      const tool = supplierTools.find(
+        (candidate) => candidate.name === "quickfile_supplier_search",
+      );
+      const props = (tool?.inputSchema as { properties: Record<string, unknown> })
+        .properties;
+      expect(props).toHaveProperty("supplierReference");
+
+      mockRequest.mockResolvedValueOnce({ RecordsetCount: 0, Record: [] });
+      await handleSupplierTool("quickfile_supplier_search", {
+        supplierReference: "ACME-001",
+      });
+
+      const [, payload] = mockRequest.mock.calls[0];
+      expect(payload.SearchParameters).toMatchObject({
+        SupplierReference: "ACME-001",
+      });
+    });
+
     it("omits undefined fields from SearchParameters", async () => {
       mockRequest.mockResolvedValueOnce({ RecordsetCount: 0, Record: [] });
 
@@ -423,7 +500,11 @@ describe("Supplier tools", () => {
       });
 
       const [, payload] = mockRequest.mock.calls[0];
-      expect(Object.keys(payload.SearchParameters).sort()).toEqual([
+      expect(
+        Object.keys(payload.SearchParameters).sort((a, b) =>
+          a.localeCompare(b),
+        ),
+      ).toEqual([
         "CompanyName",
         "Offset",
         "OrderDirection",
