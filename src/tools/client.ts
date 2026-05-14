@@ -12,7 +12,7 @@ import {
   errorResult,
   cleanParams,
   buildAddressFromArgs,
-  buildEntityData,
+  buildClientCreateData,
   buildClientUpdateData,
   searchSchemaProperties,
   entitySchemaProperties,
@@ -227,7 +227,7 @@ export async function handleClientTool(
 
       case "quickfile_client_create": {
         const address = buildAddressFromArgs(args);
-        const clientData = buildEntityData(args, address);
+        const clientData = buildClientCreateData(args, address);
         const cleanData = cleanParams(clientData);
         const response = await apiClient.request<
           { ClientData: typeof cleanData },

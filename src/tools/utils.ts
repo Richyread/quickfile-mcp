@@ -371,7 +371,13 @@ export const lineItemSchemaProperties = {
 };
 
 /**
- * Common entity properties for create/update tools
+ * Common entity properties for client create/update tools.
+ *
+ * Suppliers use a narrower schema (see `supplierEntitySchemaProperties`) because
+ * the Supplier_Create / Supplier_Update endpoints reject several fields that
+ * Client_Create / Client_Update accept (title, mobile, notes, county,
+ * companyRegNo, an Address block — see the wire-shape table near
+ * buildSupplierCreateData).
  */
 export const entitySchemaProperties = {
   companyName: {
@@ -454,12 +460,170 @@ export const entitySchemaProperties = {
   },
 };
 
+/**
+ * Supplier-specific entity properties for supplier create/update tools.
+ *
+ * Drops the args the QuickFile supplier endpoints reject with HTTP 400 on the
+ * wire: `title`, `mobile`, `notes`, `county`, `companyRegNo` (which the API
+ * renames to `CompanyNumber` — see `buildSupplierCreateData`). Keeps `address3`
+ * which the supplier endpoints accept but clients do not expose, and uses
+ * `countryIso` rather than `country` to match the wire field name.
+ */
+export const supplierEntitySchemaProperties = {
+  companyName: {
+    type: "string" as const,
+    description: "Company or organisation name",
+  },
+  companyNumber: {
+    type: "string" as const,
+    description: "Company registration number",
+  },
+  supplierReference: {
+    type: "string" as const,
+    description: "Free-form supplier reference (max 15 chars)",
+  },
+  firstName: {
+    type: "string" as const,
+    description: "Contact first name",
+  },
+  lastName: {
+    type: "string" as const,
+    description: "Contact last name",
+  },
+  email: {
+    type: "string" as const,
+    description: "Contact email address",
+  },
+  telephone: {
+    type: "string" as const,
+    description: "Contact telephone number",
+  },
+  website: {
+    type: "string" as const,
+    description: "Website URL",
+  },
+  address1: {
+    type: "string" as const,
+    description: "Address line 1",
+  },
+  address2: {
+    type: "string" as const,
+    description: "Address line 2",
+  },
+  address3: {
+    type: "string" as const,
+    description: "Address line 3",
+  },
+  town: {
+    type: "string" as const,
+    description: "Town/City",
+  },
+  postcode: {
+    type: "string" as const,
+    description: "Postcode",
+  },
+  countryIso: {
+    type: "string" as const,
+    description: "ISO 3166-1 alpha-2 country code (e.g., GB)",
+  },
+  vatNumber: {
+    type: "string" as const,
+    description: "VAT registration number",
+  },
+  vatExempt: {
+    type: "boolean" as const,
+    description: "Whether the supplier is VAT-exempt",
+  },
+  currency: {
+    type: "string" as const,
+    description: "Default currency (e.g., GBP). Sent as Preferences.DefaultCurrency on the wire.",
+    default: "GBP",
+  },
+  termDays: {
+    type: "number" as const,
+    description: "Default payment terms in days. Sent as Preferences.DefaultTerm on the wire.",
+    default: 30,
+  },
+  defaultVatRate: {
+    type: "number" as const,
+    description: "Default VAT rate (e.g., 20). Sent as Preferences.DefaultVatRate on the wire.",
+  },
+  defaultNominalCode: {
+    type: "number" as const,
+    description: "Default nominal code (5000-9997). Sent as Preferences.DefaultNominalCode on the wire.",
+  },
+};
+
 // =============================================================================
-// Shared Entity Builders (Client/Supplier)
+// Entity Builders (Client / Supplier)
 // =============================================================================
 
+/*
+ * Wire-format anchor for QuickFile supplier endpoints (last live-verified
+ * 2026-05-14 by direct-script probes against the live API).
+ *
+ * QuickFile's Client_* and Supplier_* endpoints look near-identical but diverge
+ * in three load-bearing ways. The helpers below are split to honour each
+ * endpoint's actual wire shape rather than trying to share a single mapping.
+ *
+ * --- Wrappers (Body child element) -----------------------------------------
+ *
+ *   Client_Create   → <ClientData>…</ClientData>
+ *   Client_Update   → <ClientData>…</ClientData>          (+ ClientID inside)
+ *   Supplier_Create → <SupplierDetails>…</SupplierDetails>
+ *   Supplier_Update → <SupplierDetails>…</SupplierDetails> (+ SupplierID inside)
+ *   Supplier_Search → <SearchParameters>…</SearchParameters>
+ *
+ * --- Contact-field naming --------------------------------------------------
+ *
+ *   Client_*        bare names: FirstName, LastName, Email, Telephone, Mobile
+ *   Supplier_Create Contact-prefixed: ContactFirstName, ContactSurname (lowercase n),
+ *                   ContactEmail, ContactTel.  No mobile field.
+ *   Supplier_Update Contact-prefixed: ContactFirstName, ContactSurName (CAPITAL N),
+ *                   ContactEmail, ContactTel.  No mobile field.
+ *   Supplier_Search Contact-prefixed: ContactFirstName, ContactSurname (lowercase n),
+ *                   ContactEmail, ContactTel.
+ *
+ *   Yes — the Surname field's casing differs between Supplier_Create (lowercase
+ *   n) and Supplier_Update (capital N). QuickFile is genuinely inconsistent
+ *   here; we verified this against the live API on 2026-05-14.
+ *
+ * --- Defaults block (currency, term, VAT rate, nominal code) ---------------
+ *
+ *   Client_*        flat at root: Currency, TermDays
+ *   Supplier_*      nested in a Preferences block:
+ *                     Preferences.DefaultCurrency, Preferences.DefaultTerm,
+ *                     Preferences.DefaultVatRate, Preferences.DefaultNominalCode
+ *
+ * --- Address fields --------------------------------------------------------
+ *
+ *   Client_*        nested <Address>: Address1, Address2, Town, County,
+ *                   Postcode, Country
+ *   Supplier_*      flat at root of SupplierDetails: AddressLine1, AddressLine2,
+ *                   AddressLine3, Town, Postcode, CountryISO
+ *                   (no County field; if needed, fold into AddressLine3)
+ *
+ * --- Fields the Supplier endpoints reject (HTTP 400) -----------------------
+ *
+ *   Title, Notes, ContactMobile, County, CompanyRegNo (must be CompanyNumber),
+ *   bare Email/FirstName/LastName/Telephone, top-level Currency/TermDays.
+ *
+ * --- Read/write asymmetry --------------------------------------------------
+ *
+ *   Supplier_Get's response keys do not match the write shape. Get returns
+ *   ContactSurname (lowercase n), ContactTelephone (long), and the default
+ *   currency/term flat at the root — not in a Preferences block. A Get response
+ *   cannot be round-tripped directly into Supplier_Update without remapping.
+ *
+ * To re-verify any of the above: send the relevant endpoint a SupplierDetails
+ * payload containing one unknown child element. The 400 response includes the
+ * full accepted-element list. Repeat for Client_Create / Client_Update with
+ * the relevant wrappers.
+ */
+
 /**
- * Common entity data structure for clients and suppliers
+ * Common entity data structure for clients (bare field names matching the
+ * Client_Create / Client_Update wire shape).
  */
 export interface EntityData {
   CompanyName?: string;
@@ -479,8 +643,10 @@ export interface EntityData {
 }
 
 /**
- * Build address object from tool arguments
- * Shared between client and supplier tools
+ * Build a nested <Address> block from tool arguments. Used by the client
+ * endpoints, which accept an Address sub-object. The supplier endpoints use
+ * flat AddressLine1/2/3/Town/Postcode/CountryISO instead — see
+ * `buildSupplierAddressFields`.
  */
 export function buildAddressFromArgs(
   args: Record<string, unknown>,
@@ -508,10 +674,10 @@ export function buildAddressFromArgs(
 }
 
 /**
- * Extract common entity fields from tool arguments.
- * Shared mapping used by both create and update operations.
+ * Extract client entity fields from tool arguments.
+ * Shared mapping used by both client create and update operations.
  */
-function extractEntityFields(
+function extractClientFields(
   args: Record<string, unknown>,
   address: ClientAddress,
 ): EntityData {
@@ -534,16 +700,15 @@ function extractEntityFields(
 }
 
 /**
- * Build entity data from tool arguments (for create operations).
- * Applies defaults for Currency and TermDays when not provided.
+ * Build client create data. Applies defaults for Currency and TermDays.
  */
-export function buildEntityData(
+export function buildClientCreateData(
   args: Record<string, unknown>,
   address: ClientAddress,
   defaults: { currency?: string; termDays?: number } = {},
 ): EntityData {
   const { currency = "GBP", termDays = 30 } = defaults;
-  const data = extractEntityFields(args, address);
+  const data = extractClientFields(args, address);
   data.Currency = data.Currency ?? currency;
   data.TermDays = data.TermDays ?? termDays;
   return data;
@@ -551,59 +716,196 @@ export function buildEntityData(
 
 /**
  * Build client update data (preserves undefined for partial updates).
- * Uses the bare field names (Email, FirstName, Surname, Telephone) that the
- * Client_Update endpoint expects. The supplier equivalent lives below — they
- * are kept side-by-side rather than collapsed into one shared helper because
- * the two endpoints use different wire-level field names for contact details:
- * suppliers prefix them with "Contact" (ContactEmail, ContactFirstName, …).
+ * Uses the bare field names (Email, FirstName, LastName, Telephone) that the
+ * Client_Update endpoint expects.
  */
 export function buildClientUpdateData(
   args: Record<string, unknown>,
   address: ClientAddress,
 ): EntityData {
-  return extractEntityFields(args, address);
+  return extractClientFields(args, address);
+}
+
+// =============================================================================
+// Supplier-specific entity builders
+// =============================================================================
+
+/**
+ * Flat address fields as accepted by Supplier_Create / Supplier_Update.
+ * Unlike clients (nested <Address> block), supplier endpoints take address
+ * fields directly under <SupplierDetails>.
+ */
+export interface SupplierAddressFields {
+  AddressLine1?: string;
+  AddressLine2?: string;
+  AddressLine3?: string;
+  Town?: string;
+  Postcode?: string;
+  CountryISO?: string;
 }
 
 /**
- * Build supplier update data (preserves undefined for partial updates).
- * Mirrors buildClientUpdateData but emits the Contact-prefixed wire names
- * required by Supplier_Update / Supplier_Get / Supplier_Search.
+ * Build the flat address fields supplier endpoints expect.
+ * Reads both `country` and `countryIso` from args for caller compatibility,
+ * but emits `CountryISO` on the wire (only ISO 3166-1 alpha-2 codes are
+ * accepted, e.g. "GB", "US").
  */
-export interface SupplierEntityData {
-  CompanyName?: string;
-  Title?: string;
-  ContactFirstName?: string;
-  ContactSurname?: string;
-  ContactEmail?: string;
-  ContactTelephone?: string;
-  ContactMobile?: string;
-  Website?: string;
-  VatNumber?: string;
-  CompanyRegNo?: string;
-  Currency?: string;
-  TermDays?: number;
-  Notes?: string;
-  Address?: ClientAddress;
+export function buildSupplierAddressFields(
+  args: Record<string, unknown>,
+): SupplierAddressFields {
+  const fields: SupplierAddressFields = {};
+  if (args.address1) {
+    fields.AddressLine1 = args.address1 as string;
+  }
+  if (args.address2) {
+    fields.AddressLine2 = args.address2 as string;
+  }
+  if (args.address3) {
+    fields.AddressLine3 = args.address3 as string;
+  }
+  if (args.town) {
+    fields.Town = args.town as string;
+  }
+  if (args.postcode) {
+    fields.Postcode = args.postcode as string;
+  }
+  if (args.countryIso) {
+    fields.CountryISO = args.countryIso as string;
+  } else if (args.country) {
+    // Best-effort compatibility: accept `country` and emit it as CountryISO if
+    // it already looks like a 2-letter code; otherwise drop it (the API rejects
+    // anything that isn't a valid ISO alpha-2 code).
+    const value = (args.country as string).trim();
+    if (/^[A-Za-z]{2}$/.test(value)) {
+      fields.CountryISO = value.toUpperCase();
+    }
+  }
+  return fields;
 }
 
-export function buildSupplierUpdateData(
+/**
+ * Preferences block accepted by Supplier_Create / Supplier_Update.
+ */
+export interface SupplierPreferences {
+  DefaultCurrency?: string;
+  DefaultTerm?: number;
+  DefaultVatRate?: number;
+  DefaultNominalCode?: number;
+}
+
+/**
+ * Build a Preferences block from tool arguments, or undefined when no
+ * preference-related arg was supplied (so partial updates don't smuggle in
+ * an empty Preferences block).
+ */
+function buildSupplierPreferences(
   args: Record<string, unknown>,
-  address: ClientAddress,
-): SupplierEntityData {
-  return {
+): SupplierPreferences | undefined {
+  const prefs: SupplierPreferences = {};
+  if (args.currency !== undefined) {
+    prefs.DefaultCurrency = args.currency as string;
+  }
+  if (args.termDays !== undefined) {
+    prefs.DefaultTerm = args.termDays as number;
+  }
+  if (args.defaultVatRate !== undefined) {
+    prefs.DefaultVatRate = args.defaultVatRate as number;
+  }
+  if (args.defaultNominalCode !== undefined) {
+    prefs.DefaultNominalCode = args.defaultNominalCode as number;
+  }
+  return Object.keys(prefs).length > 0 ? prefs : undefined;
+}
+
+/**
+ * Supplier_Create wire-shape body. Surname uses lowercase `n`.
+ */
+export interface SupplierCreateData extends SupplierAddressFields {
+  CompanyName?: string;
+  CompanyNumber?: string;
+  SupplierReference?: string;
+  ContactFirstName?: string;
+  ContactSurname?: string;
+  ContactTel?: string;
+  ContactEmail?: string;
+  Website?: string;
+  VatNumber?: string;
+  VatExempt?: boolean;
+  Preferences?: SupplierPreferences;
+}
+
+/**
+ * Build the body for Supplier_Create. Applies defaults for currency (GBP) and
+ * payment terms (30 days) into the Preferences block when neither is supplied.
+ */
+export function buildSupplierCreateData(
+  args: Record<string, unknown>,
+  defaults: { currency?: string; termDays?: number } = {},
+): SupplierCreateData {
+  const { currency = "GBP", termDays = 30 } = defaults;
+
+  // Pre-apply defaults so they land inside the Preferences block.
+  const argsWithDefaults = {
+    ...args,
+    currency: args.currency ?? currency,
+    termDays: args.termDays ?? termDays,
+  };
+
+  const data: SupplierCreateData = {
     CompanyName: args.companyName as string | undefined,
-    Title: args.title as string | undefined,
+    CompanyNumber: args.companyNumber as string | undefined,
+    SupplierReference: args.supplierReference as string | undefined,
     ContactFirstName: args.firstName as string | undefined,
     ContactSurname: args.lastName as string | undefined,
+    ContactTel: args.telephone as string | undefined,
     ContactEmail: args.email as string | undefined,
-    ContactTelephone: args.telephone as string | undefined,
-    ContactMobile: args.mobile as string | undefined,
     Website: args.website as string | undefined,
     VatNumber: args.vatNumber as string | undefined,
-    CompanyRegNo: args.companyRegNo as string | undefined,
-    Currency: args.currency as string | undefined,
-    TermDays: args.termDays as number | undefined,
-    Notes: args.notes as string | undefined,
-    Address: Object.keys(address).length > 0 ? address : undefined,
+    VatExempt: args.vatExempt as boolean | undefined,
+    Preferences: buildSupplierPreferences(argsWithDefaults),
+    ...buildSupplierAddressFields(args),
+  };
+  return data;
+}
+
+/**
+ * Supplier_Update wire-shape body. Surname uses CAPITAL `N` — Supplier_Update
+ * and Supplier_Create diverge on this one field name. See the wire-format
+ * anchor above for the verified accepted-element lists from each endpoint.
+ */
+export interface SupplierUpdateData extends SupplierAddressFields {
+  CompanyName?: string;
+  CompanyNumber?: string;
+  SupplierReference?: string;
+  ContactFirstName?: string;
+  ContactSurName?: string;
+  ContactTel?: string;
+  ContactEmail?: string;
+  Website?: string;
+  VatNumber?: string;
+  VatExempt?: boolean;
+  Preferences?: SupplierPreferences;
+}
+
+/**
+ * Build the body for Supplier_Update (preserves undefined for partial updates;
+ * never injects defaults — the caller may be touching only one field).
+ */
+export function buildSupplierUpdateData(
+  args: Record<string, unknown>,
+): SupplierUpdateData {
+  return {
+    CompanyName: args.companyName as string | undefined,
+    CompanyNumber: args.companyNumber as string | undefined,
+    SupplierReference: args.supplierReference as string | undefined,
+    ContactFirstName: args.firstName as string | undefined,
+    ContactSurName: args.lastName as string | undefined,
+    ContactTel: args.telephone as string | undefined,
+    ContactEmail: args.email as string | undefined,
+    Website: args.website as string | undefined,
+    VatNumber: args.vatNumber as string | undefined,
+    VatExempt: args.vatExempt as boolean | undefined,
+    Preferences: buildSupplierPreferences(args),
+    ...buildSupplierAddressFields(args),
   };
 }

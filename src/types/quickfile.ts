@@ -318,10 +318,20 @@ export interface Supplier {
 }
 
 export interface SupplierSearchParams {
+  // Field names match Supplier_Search's accepted wire elements verified
+  // against the live API on 2026-05-14. Supplier_Search uses Contact-prefixed
+  // names (ContactEmail, ContactFirstName, ContactSurname, ContactTel) while
+  // Client_Search uses bare names (Email, FirstName, Surname, Telephone) for
+  // the same concepts. The combined ContactName field that earlier versions
+  // exposed isn't a real wire element on either endpoint.
   CompanyName?: string;
-  ContactName?: string;
-  Email?: string;
+  ContactFirstName?: string;
+  ContactSurname?: string;
+  ContactEmail?: string;
+  ContactTel?: string;
+  SupplierReference?: string;
   Postcode?: string;
+  ShowDeleted?: boolean;
   ReturnCount?: number;
   Offset?: number;
   OrderResultsBy?: 'CompanyName' | 'DateCreated' | 'SupplierID';
