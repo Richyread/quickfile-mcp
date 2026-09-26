@@ -11,10 +11,7 @@ import {
   successResult,
   errorResult,
   cleanParams,
-  buildAddressFromArgs,
-  buildEntityData,
   searchSchemaProperties,
-  entitySchemaProperties,
   type ToolResult,
 } from "./utils.js";
 
@@ -54,11 +51,12 @@ export const supplierTools: Tool[] = [
   },
   {
     name: "quickfile_supplier_create",
-    description: "Create a new supplier record",
+    description:
+      "Create a new supplier record. QuickFile's supplier record has no notes, title, mobile or county fields, so those are not accepted here.",
     inputSchema: {
       type: "object",
-      properties: entitySchemaProperties,
-      required: [],
+      properties: supplierCreateSchemaProperties(),
+      required: ["companyName"],
     },
   },
   {
@@ -76,6 +74,97 @@ export const supplierTools: Tool[] = [
     },
   },
 ];
+
+// =============================================================================
+// Supplier_Create payload
+// =============================================================================
+
+/**
+ * Supplier_Create's `SupplierDetails` is a flat element with its own names,
+ * not the Client_Create shape: `ContactEmail` rather than `Email`,
+ * `AddressLine1..3` rather than a nested `Address`, currency and terms under
+ * `Preferences`, and a mandatory `CountryISO`. Reusing the client mapping
+ * sent fields the API's schema rejects, so every create failed.
+ */
+function supplierCreateSchemaProperties() {
+  const str = (description: string) => ({
+    type: "string" as const,
+    description,
+  });
+  return {
+    companyName: str("Company or organisation name"),
+    supplierReference: str(
+      "Your own reference for the supplier (QuickFile assigns one if omitted)",
+    ),
+    firstName: str("Contact first name"),
+    lastName: str("Contact surname"),
+    email: str(
+      "Contact email address (stored as the supplier's ContactEmail, which supplier search matches on)",
+    ),
+    telephone: str("Contact telephone number"),
+    website: str("Website URL"),
+    address1: str("Address line 1"),
+    address2: str("Address line 2"),
+    address3: str("Address line 3"),
+    town: str("Town/City"),
+    postcode: str("Postcode"),
+    country: str(
+      "Two-letter ISO 3166 country code, e.g. GB, IE, US (default: GB). 'UK' is accepted as GB.",
+    ),
+    vatNumber: str("VAT registration number"),
+    companyRegNo: str("Company registration number"),
+    currency: str("Default currency (e.g., GBP)"),
+    termDays: {
+      type: "number" as const,
+      description: "Default payment terms in days",
+    },
+  };
+}
+
+/** Normalise a country argument to the ISO code Supplier_Create requires. */
+export function toCountryIso(country: unknown): string {
+  if (country === undefined || country === null || country === "") {
+    return "GB";
+  }
+  const c = String(country).trim().toUpperCase();
+  if (c === "UK" || c === "UNITED KINGDOM") {
+    return "GB";
+  }
+  if (!/^[A-Z]{2}$/.test(c)) {
+    throw new Error(
+      `country must be a two-letter ISO code (e.g. GB), got "${String(country)}"`,
+    );
+  }
+  return c;
+}
+
+export function buildSupplierDetails(
+  args: Record<string, unknown>,
+): Record<string, unknown> {
+  const s = (k: string) => args[k] as string | undefined;
+  const preferences = cleanParams({
+    DefaultCurrency: s("currency"),
+    DefaultTerm: args.termDays as number | undefined,
+  });
+  return cleanParams({
+    CompanyName: s("companyName"),
+    SupplierReference: s("supplierReference"),
+    CompanyNumber: s("companyRegNo"),
+    AddressLine1: s("address1"),
+    AddressLine2: s("address2"),
+    AddressLine3: s("address3"),
+    Town: s("town"),
+    Postcode: s("postcode"),
+    CountryISO: toCountryIso(args.country),
+    VatNumber: s("vatNumber"),
+    Website: s("website"),
+    ContactFirstName: s("firstName"),
+    ContactSurname: s("lastName"),
+    ContactEmail: s("email"),
+    ContactTel: s("telephone"),
+    Preferences: Object.keys(preferences).length > 0 ? preferences : undefined,
+  });
+}
 
 // =============================================================================
 // Tool Handlers
@@ -144,13 +233,14 @@ export async function handleSupplierTool(
       }
 
       case "quickfile_supplier_create": {
-        const address = buildAddressFromArgs(args);
-        const supplierData = buildEntityData(args, address);
-        const cleanData = cleanParams(supplierData);
+        if (!args.companyName) {
+          return errorResult("companyName is required");
+        }
+        const details = buildSupplierDetails(args);
         const response = await apiClient.request<
-          { SupplierData: typeof cleanData },
+          { SupplierDetails: typeof details },
           SupplierCreateResponse
-        >("Supplier_Create", { SupplierData: cleanData });
+        >("Supplier_Create", { SupplierDetails: details });
         return successResult({
           success: true,
           supplierId: response.SupplierID,
