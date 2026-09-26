@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- `quickfile_supplier_create` always failed with a 400. It sent the Client_Create shape (`SupplierData`, `Email`, nested `Address`, `Notes`) where Supplier_Create expects a flat `SupplierDetails` with `ContactEmail`, `AddressLine1..3`, `Preferences` and a mandatory `CountryISO`. The tool now builds that shape, defaults the country to `GB`, requires `companyName`, and no longer advertises `notes`, `title`, `mobile` or `county`, which the supplier record does not have.
+
 ## [2.0.0] - 2026-05-01
 
 ### Changed
