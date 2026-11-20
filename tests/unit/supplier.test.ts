@@ -158,6 +158,62 @@ describe("Supplier tools", () => {
     });
   });
 
+  describe("quickfile_supplier_search", () => {
+    it("sends SearchParameters with QuickFile's Supplier_Search field names", async () => {
+      mockRequest.mockResolvedValueOnce({ RecordsetCount: 0, Record: [] });
+
+      await handleSupplierTool("quickfile_supplier_search", {
+        companyName: "Acme",
+        email: "billing@example.com",
+        firstName: "Sam",
+        lastName: "Jones",
+      });
+
+      expect(mockRequest).toHaveBeenCalledWith("Supplier_Search", {
+        SearchParameters: {
+          OrderResultsBy: "CompanyName",
+          OrderDirection: "ASC",
+          ReturnCount: 25,
+          Offset: 0,
+          CompanyName: "Acme",
+          ContactFirstName: "Sam",
+          ContactSurname: "Jones",
+          ContactEmail: "billing@example.com",
+        },
+      });
+    });
+
+    it("never sends the field names Supplier_Search rejects", async () => {
+      mockRequest.mockResolvedValueOnce({ RecordsetCount: 0, Record: [] });
+
+      await handleSupplierTool("quickfile_supplier_search", {
+        email: "billing@example.com",
+      });
+
+      const sent = mockRequest.mock.calls[0][1].SearchParameters;
+      for (const rejected of ["Email", "ContactName", "Postcode"]) {
+        expect(sent).not.toHaveProperty(rejected);
+      }
+      expect(sent.ContactEmail).toBe("billing@example.com");
+    });
+
+    it("advertises only search fields Supplier_Search accepts", () => {
+      const tool = supplierTools.find(
+        (t) => t.name === "quickfile_supplier_search",
+      );
+      const props = Object.keys(
+        (tool?.inputSchema.properties ?? {}) as Record<string, unknown>,
+      );
+
+      expect(props).toEqual(
+        expect.arrayContaining(["companyName", "email", "firstName", "lastName"]),
+      );
+      for (const unsupported of ["contactName", "postcode"]) {
+        expect(props).not.toContain(unsupported);
+      }
+    });
+  });
+
   describe("toCountryIso", () => {
     it.each([
       [undefined, "GB"],

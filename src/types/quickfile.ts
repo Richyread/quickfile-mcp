@@ -319,9 +319,9 @@ export interface Supplier {
 
 export interface SupplierSearchParams {
   CompanyName?: string;
-  ContactName?: string;
-  Email?: string;
-  Postcode?: string;
+  ContactFirstName?: string;
+  ContactSurname?: string;
+  ContactEmail?: string;
   ReturnCount?: number;
   Offset?: number;
   OrderResultsBy?: 'CompanyName' | 'DateCreated' | 'SupplierID';

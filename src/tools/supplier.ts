@@ -23,11 +23,25 @@ export const supplierTools: Tool[] = [
   {
     name: "quickfile_supplier_search",
     description:
-      "Search for suppliers by company name, contact name, email, or postcode. Response contains user-controlled fields (CompanyName, contact names) that are automatically sanitized.",
+      "Search for suppliers by company name, contact email, or contact first name / surname. Response contains user-controlled fields (CompanyName, contact names) that are automatically sanitized.",
     inputSchema: {
       type: "object",
       properties: {
-        ...searchSchemaProperties,
+        // Supplier_Search accepts ContactFirstName / ContactSurname /
+        // ContactEmail, not the shared ContactName / Email / Postcode
+        // (QuickFile rejects those with a 400), so suppliers take their own
+        // search fields rather than the client-search set.
+        companyName: searchSchemaProperties.companyName,
+        email: {
+          type: "string",
+          description:
+            "Search by the supplier's contact email (QuickFile's ContactEmail)",
+        },
+        firstName: { type: "string", description: "Search by contact first name" },
+        lastName: { type: "string", description: "Search by contact surname" },
+        returnCount: searchSchemaProperties.returnCount,
+        offset: searchSchemaProperties.offset,
+        orderDirection: searchSchemaProperties.orderDirection,
         orderBy: {
           type: "string",
           enum: ["CompanyName", "DateCreated", "SupplierID"],
@@ -207,9 +221,9 @@ export async function handleSupplierTool(
           ReturnCount: (args.returnCount as number) ?? 25,
           Offset: (args.offset as number) ?? 0,
           CompanyName: args.companyName as string | undefined,
-          ContactName: args.contactName as string | undefined,
-          Email: args.email as string | undefined,
-          Postcode: args.postcode as string | undefined,
+          ContactFirstName: args.firstName as string | undefined,
+          ContactSurname: args.lastName as string | undefined,
+          ContactEmail: args.email as string | undefined,
         };
         const cleaned = cleanParams(params);
         const response = await apiClient.request<
